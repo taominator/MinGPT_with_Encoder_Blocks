@@ -66,8 +66,7 @@ class CausalSelfAttention(nn.Module):
         
         if mask is not None:  # Apply the mask, if provided.
             # Ensure the mask is broadcastable to the attention scores.
-            mask = mask[:, None, None, :].float() 
-            att = att * mask + (1.0 - mask) * float('-inf')
+            att.masked_fill_(~mask.bool(), float('-inf'))
         
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
@@ -124,6 +123,8 @@ class CrossSelfAttention(nn.Module):
         self.n_embd = config.n_embd
 
     def forward(self, x, mask=None):
+        #print(f'CrossSelfAttention_forward_start x: {x}')
+
         B, T, C = x.size() # batch size, sequence length, embedding dimensionality (n_embd)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
@@ -131,21 +132,33 @@ class CrossSelfAttention(nn.Module):
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        #print(f'q : {q}')
+        #print(f'k : {k}')
+        #print(f'v : {v}')
+        #print(f'q, k ,v isnan: {torch.isnan(q).any()}, {torch.isnan(k).any()}, {torch.isnan(v).any()}')
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        #print(f'att : {att}')
+        #print(f'att isnan : {torch.isnan(att).any()}')
 
         if mask is not None:  # Apply the mask, if provided.
-            mask = mask[:, None, None, :].float() 
-            att = att * mask + (1.0 - mask) * float('-inf')
+            att.masked_fill_(~mask.bool(), float('-inf'))
+        #print(f'mask_att : {att}')
+        #print(f'mask_att isnan : {torch.isnan(att).any()}')
 
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
+        #print(f'y : {y}')
+        #print(f'y isnan : {torch.isnan(y).any()}')
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
 
         # output projection
         y = self.resid_dropout(self.c_proj(y))
+        print(f'CrossSelfAttention_forward_end y: {y}')
+        #print(f'CrossSelfAttention_forward_end isnan : {torch.isnan(y).any()}')
+        #print(f'max: {torch.max(y)}')
         return y
 
 
@@ -168,7 +181,9 @@ class EncoderBlock(nn.Module):
 
     def forward(self, x, mask=None):
         x = x + self.attn(self.ln_1(x), mask=mask)  # pass the mask to the attention layer
+        #print(f'x + self.attn(self.ln_1) x: {x}')
         x = x + self.mlpf(self.ln_2(x))
+        #print(f'x + self.mlpf(self.ln_2) x: {x}')
         return x
 
 
@@ -308,20 +323,28 @@ class GPT(nn.Module):
 
         # forward the GPT model itself
         tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
+        #print(f'tok_emb: {tok_emb}')
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (1, t, n_embd)
+        #print(f'pos_emb: {pos_emb}')
         x = self.transformer.drop(tok_emb + pos_emb)
+        #print(f'self.transformer.drop x: {x}')
         for encoder_block in self.transformer.h_encoder:
             x = encoder_block(x, mask=attention_mask)
+        #print(f'self.transformer.h_encoder x: {x}')
         for block in self.transformer.h:
             x = block(x, mask=attention_mask)
+        #print(f'self.transformer.h x: {x}')
         x = self.transformer.ln_f(x)
+        #print(f'self.transformer.ln_f x: {x}')
         logits = self.lm_head(x)
+        #print(f'self.lm_head logits: {logits}')
 
         # if we are given some desired targets also calculate the loss
         loss = None
         if targets is not None:
-            print(f'logits(DTYPE:{type(logits)}: {logits})')
-            print(f'targets(DTYPE:{type(targets)}: {targets})')
+            #print(f'logits(DTYPE):{type(logits[0])}: {logits}')
+            targets = targets.to(dtype=torch.long)
+            #print(f'targets(DTYPE):{type(targets[0])}: {targets}')
             #targets = targets.long()  # Convert to long
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
 

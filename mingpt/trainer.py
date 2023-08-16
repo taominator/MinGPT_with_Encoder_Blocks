@@ -110,6 +110,11 @@ class Trainer:
                 batch = [t.to(self.device) for t in batch]
                 x, y, attention_mask = batch
 
+                print(f'iteration {self.iter_num}:')
+                print(f'x: \n{x}')
+                print(f'y: \n{y}')
+                print(f'attention_mask: \n{attention_mask}')
+
                 # forward the model, now including the attention mask
                 logits, self.loss = model(x, y, attention_mask=attention_mask)
 
@@ -121,11 +126,6 @@ class Trainer:
 
                 # Increment the iteration number
                 self.iter_num += 1
-
-                print(f'iteration {self.iter_num}:')
-                print(f'x: \n{x}')
-                print(f'y: \n{y}')
-                print(f'attention_mask: \n{attention_mask}')
 
                 # Print the current loss and time taken every 1000 iterations
                 if self.iter_num % 1 == 0:

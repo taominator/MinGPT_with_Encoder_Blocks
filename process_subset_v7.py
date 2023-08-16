@@ -36,19 +36,19 @@ def tokenize_generator(text, encoder, context_length=1024):
 
         # For texts shorter than extended length
         if total_length <= extended_context_length:
-            yield np.array(tokenized_text[:-1], dtype=np.long), np.array(tokenized_text[1:], dtype=np.long)
+            yield np.array(tokenized_text[:-1], dtype=np.int64), np.array(tokenized_text[1:], dtype=np.int64)
                 
-        # For longer texts
+        # For int64er texts
         else:
             # Slide the window by the stride for the text
             for start_idx in range(0, total_length - extended_context_length + 1, stride):
                 end_idx = start_idx + extended_context_length
-                yield np.array(tokenized_text[start_idx:end_idx-1], dtype=np.long), np.array(tokenized_text[start_idx+1:end_idx], dtype=np.long)
+                yield np.array(tokenized_text[start_idx:end_idx-1], dtype=np.int64), np.array(tokenized_text[start_idx+1:end_idx], dtype=np.int64)
 
             # If there are any tokens left at the end that couldn't fit a full extended_context_length window
             if end_idx < total_length:
                 start_idx = total_length - extended_context_length
-                yield np.array(tokenized_text[start_idx:-1], dtype=np.long), np.array(tokenized_text[start_idx+1:], dtype=np.long)
+                yield np.array(tokenized_text[start_idx:-1], dtype=np.int64), np.array(tokenized_text[start_idx+1:], dtype=np.int64)
                 
     except Exception as e:
         print(f"Error during tokenization: {e}")
